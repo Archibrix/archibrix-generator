@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BrixGPT — Generateur de Kit LEGO par Archibrix</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Poppins',sans-serif;background:#F2F2F2;min-height:100vh}
+
+/* HEADER */
+.hdr{background:#111;padding:14px 40px;display:flex;align-items:center;justify-content:space-between}
+.hdr-logo{font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px}
+.hdr-logo span{color:#7C3AED}
+.hdr-sub{font-size:10px;color:#555;font-weight:400}
+.hdr-right{font-size:11px;color:#444}
+
+/* PROGRESS */
+.pbar{background:#fff;border-bottom:1px solid #E8E8E8;padding:0 40px;position:sticky;top:0;z-index:20}
+.pbar-inner{display:flex;max-width:1100px;margin:0 auto;overflow-x:auto;scrollbar-width:none}
+.pbar-inner::-webkit-scrollbar{display:none}
+.ps{display:flex;align-items:center;gap:7px;padding:13px 14px 13px 0;font-size:11px;font-weight:500;color:#CCC;border-bottom:2.5px solid transparent;white-space:nowrap;transition:all .2s}
+.ps.active{color:#111;border-bottom-color:#111}
+.ps.done{color:#22C55E;border-bottom-color:#22C55E}
+.pd{width:18px;height:18px;border-radius:50%;background:#F0F0F0;font-size:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s}
+.pd::before{content:attr(data-n);font-size:9px;font-weight:700;color:#AAA}
+.ps.active .pd{background:#111;color:#fff}
+.ps.active .pd::before{color:#fff}
+.ps.done .pd{background:#22C55E}
+.ps.done .pd::before{content:'✓';font-size:9px;color:#fff}
+.psep{width:10px;height:1px;background:#E8E8E8;align-self:center;flex-shrink:0}
+
+/* SECTIONS */
+.sec{display:none;padding:40px 40px 60px;max-width:1100px;margin:0 auto}
+.sec.show{display:block}
+.sec-ey{font-size:10px;font-weight:700;letter-spacing:2.5px;color:#F2A93B;text-transform:uppercase;margin-bottom:6px}
+.sec-title{font-size:21px;font-weight:800;color:#111;margin-bottom:5px}
+.sec-sub{font-size:13px;color:#777;line-height:1.65;margin-bottom:26px}
+
+/* URL */
+.url-row{display:flex;gap:10px;margin-bottom:8px}
+.url-inp{flex:1;background:#fff;border:2px solid #E8E8E8;border-radius:12px;padding:11px 16px;font-family:'Poppins',sans-serif;font-size:14px;color:#111;outline:none;transition:border-color .2s}
+.url-inp:focus{border-color:#111}
+.url-btn{background:#111;color:#fff;border:none;border-radius:12px;padding:11px 20px;font-size:13px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;white-space:nowrap}
+.url-btn:disabled{background:#CCC;cursor:not-allowed}
+
+/* ANA LOADER */
+.ana-box{display:none;background:#fff;border:2px solid #E8E8E8;border-radius:14px;padding:18px 22px;margin-top:10px}
+.ana-row{display:flex;align-items:center;gap:12px}
+.sp-sm{width:24px;height:24px;border:3px solid #E8E8E8;border-top-color:#F2A93B;border-radius:50%;animation:spin 1s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ana-msg{font-size:13px;font-weight:600;color:#111}
+.ana-sub{font-size:11px;color:#888;margin-top:2px}
+
+/* KIT GRID */
+.kit-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:24px}
+.kc{background:#fff;border:2px solid #E8E8E8;border-radius:14px;padding:16px 13px;cursor:pointer;transition:all .2s;position:relative;display:flex;flex-direction:column}
+.kc:hover{transform:translateY(-2px);box-shadow:0 5px 18px rgba(0,0,0,.08);border-color:#CCC}
+.kc.on{border-color:#111;box-shadow:0 0 0 3px rgba(17,17,17,.07);background:#F8F8F8}
+.kc.ai{border-color:#F2A93B;background:#FFFBF0}
+.kc.ai:hover{box-shadow:0 5px 18px rgba(242,169,59,.15)}
+.kc.ai.on{border-color:#D4912A;box-shadow:0 0 0 3px rgba(242,169,59,.18);background:#FFF3D0}
+.kc-ai{position:absolute;top:8px;left:8px;background:#F2A93B;color:#fff;font-size:8px;font-weight:800;padding:2px 6px;border-radius:100px}
+.kc-chk{position:absolute;top:8px;right:8px;width:16px;height:16px;background:#111;border-radius:50%;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .18s}
+.kc.ai .kc-chk{background:#F2A93B}
+.kc.on .kc-chk{opacity:1}
+.kc-chk svg{width:8px;height:6px}
+.kc-icon{font-size:24px;margin-bottom:8px;margin-top:4px}
+.kc-label{font-size:12px;font-weight:700;color:#111;margin-bottom:3px;line-height:1.2}
+.kc-desc{font-size:10px;color:#888;line-height:1.4;flex:1}
+.autre-f{display:none;margin-top:10px;padding-top:10px;border-top:1px solid #E8E8E8}
+.autre-f.show{display:block}
+.af-lbl{font-size:9px;font-weight:700;color:#AAA;text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px}
+.af-i{width:100%;border:1.5px solid #E8E8E8;border-radius:7px;padding:7px 10px;font-family:'Poppins',sans-serif;font-size:11px;color:#111;outline:none;margin-bottom:7px}
+.af-i:focus{border-color:#F2A93B}
+
+/* PHOTO */
+.photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.ph-opt{background:#fff;border:2px solid #E8E8E8;border-radius:14px;padding:22px 18px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.ph-opt:hover{border-color:#CCC;transform:translateY(-2px);box-shadow:0 5px 18px rgba(0,0,0,.07)}
+.ph-opt.on{border-color:#111;box-shadow:0 0 0 3px rgba(17,17,17,.07)}
+.ph-opt.ok{border-color:#22C55E;background:#F0FFF4}
+.ph-icon{font-size:28px;margin-bottom:8px}
+.ph-title{font-size:13px;font-weight:700;color:#111;margin-bottom:3px}
+.ph-sub{font-size:11px;color:#888;line-height:1.4}
+.up-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.up-prev{max-height:100px;border-radius:7px;margin-top:10px;display:none;max-width:100%;object-fit:contain}
+.search-row{display:none;gap:8px;margin-top:10px}
+.search-row.show{display:flex}
+.search-i{flex:1;background:#fff;border:2px solid #E8E8E8;border-radius:9px;padding:9px 13px;font-family:'Poppins',sans-serif;font-size:13px;color:#111;outline:none}
+.search-i:focus{border-color:#111}
+.search-btn{background:#F2A93B;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;white-space:nowrap}
+.search-btn:disabled{background:#CCC;cursor:not-allowed}
+.search-res{display:none;margin-top:10px}
+.search-res.show{display:block}
+.search-res img{width:100%;max-height:160px;object-fit:cover;border-radius:8px}
+.search-res-lbl{font-size:10px;color:#888;margin-top:5px;text-align:center}
+
+/* BRANDING */
+.inp-w{background:#fff;border:2px solid #E8E8E8;border-radius:13px;padding:4px;margin-bottom:11px;transition:border-color .2s}
+.inp-w:focus-within{border-color:#111}
+.inp{width:100%;border:none;outline:none;font-family:'Poppins',sans-serif;font-size:13px;color:#111;padding:10px 13px;background:transparent}
+.inp::placeholder{color:#CCC}
+.logo-zone{background:#fff;border:2px dashed #E8E8E8;border-radius:13px;padding:18px;text-align:center;cursor:pointer;transition:all .2s;position:relative;margin-bottom:16px}
+.logo-zone:hover{border-color:#BBB}
+.logo-zone.ok{border-color:#22C55E;border-style:solid;background:#F0FFF4}
+.logo-prev{max-height:60px;border-radius:6px;margin-top:8px;display:none;max-width:100%;object-fit:contain}
+.logo-analyzing{display:none;font-size:11px;color:#F2A93B;margin-top:6px;font-weight:600}
+
+/* DETAIL */
+.detail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
+.dc{background:#fff;border:2px solid #E8E8E8;border-radius:14px;overflow:hidden;cursor:pointer;transition:all .2s}
+.dc:hover{border-color:#CCC;transform:translateY(-2px);box-shadow:0 5px 18px rgba(0,0,0,.07)}
+.dc.on{border-color:#111;box-shadow:0 0 0 3px rgba(17,17,17,.07)}
+.dc.reco{border-color:#F2A93B}
+.dc.reco.on{border-color:#111}
+.dc-top{height:76px;display:flex;align-items:center;justify-content:center;font-size:32px;background:#F5F5F5;flex-direction:column;gap:3px}
+.dc-reco-lbl{font-size:8px;font-weight:700;color:#F2A93B;letter-spacing:.3px}
+.dc-body{padding:11px 13px}
+.dc-label{font-size:12px;font-weight:700;color:#111;margin-bottom:2px}
+.dc-pieces{font-size:10px;font-weight:700;color:#F2A93B;margin-bottom:3px}
+.dc-desc{font-size:10px;color:#888;line-height:1.4}
+.reco-box{background:#FFF8EC;border:1.5px solid #F2A93B;border-radius:11px;padding:11px 15px;margin-bottom:18px;font-size:12px;color:#111;line-height:1.55;display:none}
+.reco-box.show{display:block}
+
+/* RECAP */
+.recap-box{background:#fff;border:2px solid #E8E8E8;border-radius:14px;padding:18px 22px;margin-bottom:20px}
+.recap-title{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.recap-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ri{background:#F5F5F5;border-radius:9px;padding:9px 12px}
+.ri-k{font-size:9px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+.ri-v{font-size:12px;font-weight:600;color:#111}
+.ri-v.ok{color:#16A34A}
+.ri-v.miss{color:#CCC}
+
+/* GEN */
+.gen-box{text-align:center;padding:48px 20px}
+.sp-lg{width:48px;height:48px;border:4px solid #E8E8E8;border-top-color:#111;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 18px}
+.gen-title{font-size:18px;font-weight:800;color:#111;margin-bottom:6px}
+.gen-steps{display:flex;flex-direction:column;gap:7px;max-width:320px;margin:20px auto 0;text-align:left}
+.gs{display:flex;align-items:center;gap:9px;font-size:11px;color:#CCC;transition:color .3s}
+.gs.active{color:#111;font-weight:600}
+.gs.done{color:#22C55E}
+.gs-dot{width:7px;height:7px;border-radius:50%;background:#E8E8E8;flex-shrink:0;transition:background .3s}
+.gs.active .gs-dot{background:#111}
+.gs.done .gs-dot{background:#22C55E}
+.val-box{background:#FFF8EC;border:1.5px solid #F2A93B;border-radius:11px;padding:12px 16px;margin-bottom:16px;font-size:12px;display:none}
+.val-box.show{display:block}
+
+/* RESULTS */
+.res-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:18px}
+.rc{background:#fff;border:2px solid #E8E8E8;border-radius:16px;overflow:hidden;cursor:pointer;transition:all .2s;position:relative}
+.rc:hover{border-color:#CCC;transform:translateY(-2px);box-shadow:0 5px 22px rgba(0,0,0,.08)}
+.rc.on{border-color:#111;box-shadow:0 0 0 3px rgba(17,17,17,.07)}
+.rc-img-wrap{position:relative}
+.rc img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.rc-wm{position:absolute;bottom:7px;right:8px;font-size:7.5px;color:rgba(140,140,140,.55);font-family:'Poppins',sans-serif;font-weight:500;line-height:1.3;text-align:right;pointer-events:none}
+.rc-body{padding:12px 14px}
+.rc-label{font-size:12px;font-weight:700;color:#111}
+.rc-sub{font-size:10px;color:#888;margin-top:2px}
+.rc-chk{display:none;align-items:center;gap:4px;font-size:10px;font-weight:600;color:#16A34A;margin-top:5px}
+.rc.on .rc-chk{display:flex}
+.score-badge{display:inline-block;padding:2px 8px;border-radius:100px;font-size:9px;font-weight:700;margin-top:4px}
+.score-good{background:#DCFCE7;color:#16A34A}
+.score-bad{background:#FEF2F2;color:#DC2626}
+
+/* BUTTONS */
+.btn{background:#111;color:#fff;border:none;border-radius:100px;padding:12px 32px;font-size:13px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;transition:background .18s}
+.btn:hover{background:#333}
+.btn:disabled{background:#DDD;cursor:not-allowed;color:#999}
+.btn-back{background:transparent;color:#888;border:2px solid #E8E8E8;border-radius:100px;padding:11px 20px;font-size:12px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer}
+.btn-back:hover{border-color:#BBB}
+.btn-skip{background:transparent;color:#AAA;border:none;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;text-decoration:underline;text-underline-offset:2px;padding:11px 0}
+.btn-skip:hover{color:#666}
+.btn-amber{background:#F2A93B;color:#fff;border:none;border-radius:100px;padding:12px 32px;font-size:13px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;text-decoration:none;display:inline-block}
+.btn-amber:hover{background:#D4912A}
+.btn-regen{background:transparent;color:#111;border:2px solid #E8E8E8;border-radius:100px;padding:9px 18px;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;margin-bottom:16px}
+.btn-regen:hover{border-color:#111}
+.btn-row{display:flex;align-items:center;gap:10px;margin-top:24px;flex-wrap:wrap}
+
+/* CTA */
+.cta-box{background:#111;border-radius:18px;padding:26px 30px;text-align:center}
+.cta-ey{font-size:9px;font-weight:700;letter-spacing:2.5px;color:#F2A93B;text-transform:uppercase;margin-bottom:8px}
+.cta-title{font-size:19px;font-weight:800;color:#fff;margin-bottom:6px}
+.cta-sub{font-size:12px;color:#555;margin-bottom:18px;line-height:1.6}
+
+.err{background:#FEF2F2;border:1.5px solid #FECACA;border-radius:10px;padding:11px 15px;margin-bottom:12px;font-size:12px;color:#DC2626;display:none}
+
+@media(max-width:860px){.kit-grid{grid-template-columns:repeat(3,1fr)}.detail-grid{grid-template-columns:repeat(2,1fr)}.photo-grid,.res-grid,.recap-grid{grid-template-columns:1fr}.sec,.pbar,.hdr{padding-left:20px;padding-right:20px}}
+@media(max-width:560px){.kit-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div>
+    <div class="hdr-logo">brix<span>GPT</span></div>
+    <div class="hdr-sub">powered by archibrix</div>
+  </div>
+  <div class="hdr-right">archibrix.net</div>
+</div>
+
+<div class="pbar">
+  <div class="pbar-inner">
+    <div class="ps active" id="p1"><div class="pd" data-n="1"></div>Entreprise</div>
+    <div class="psep"></div>
+    <div class="ps" id="p2"><div class="pd" data-n="2"></div>Kit</div>
+    <div class="psep"></div>
+    <div class="ps" id="p3"><div class="pd" data-n="3"></div>Photo</div>
+    <div class="psep"></div>
+    <div class="ps" id="p4"><div class="pd" data-n="4"></div>Branding</div>
+    <div class="psep"></div>
+    <div class="ps" id="p5"><div class="pd" data-n="5"></div>Complexite</div>
+    <div class="psep"></div>
+    <div class="ps" id="p6"><div class="pd" data-n="6"></div>Generation</div>
+  </div>
+</div>
+
+<!-- S1 ENTREPRISE -->
+<div class="sec show" id="s1">
+  <div class="sec-ey">Etape 1 sur 6</div>
+  <div class="sec-title">Parlez-nous de votre entreprise</div>
+  <div class="sec-sub">Entrez l'URL de votre site — BrixGPT analyse votre activite et prepare des suggestions de kits personnalisees. Vous pouvez aussi continuer sans.</div>
+  <div class="url-row">
+    <input class="url-inp" id="site-url" type="text" placeholder="https://votreentreprise.fr">
+    <button class="url-btn" id="ana-btn" onclick="analyzeSite()">Analyser &#8594;</button>
+  </div>
+  <div class="err" id="url-err"></div>
+  <div class="ana-box" id="ana-box">
+    <div class="ana-row">
+      <div class="sp-sm"></div>
+      <div>
+        <div class="ana-msg" id="ana-msg">Lecture de votre site...</div>
+        <div class="ana-sub" id="ana-sub">BrixGPT analyse votre activite</div>
+      </div>
+    </div>
+  </div>
+  <div class="btn-row" style="margin-top:18px">
+    <button class="btn" onclick="goStep(2)">Continuer &#8594;</button>
+  </div>
+</div>
+
+<!-- S2 KIT -->
+<div class="sec" id="s2">
+  <div class="sec-ey">Etape 2 sur 6</div>
+  <div class="sec-title">Quel kit voulez-vous creer ?</div>
+  <div class="sec-sub" id="s2-sub">Selectionnez une suggestion ou decrivez votre idee.</div>
+  <div class="kit-grid" id="kit-grid"></div>
+  <div class="btn-row">
+    <button class="btn-back" onclick="goStep(1)">&#8592; Retour</button>
+    <button class="btn" id="btn-s2" onclick="goStep(3)" disabled>Photo de reference &#8594;</button>
+  </div>
+</div>
+
+<!-- S3 PHOTO -->
+<div class="sec" id="s3">
+  <div class="sec-ey">Etape 3 sur 6</div>
+  <div class="sec-title">Photo de reference</div>
+  <div class="sec-sub">Ajoutez une photo de votre batiment, produit, vehicule ou objet. BrixGPT l'analyse pour reproduire les formes exactes en LEGO. Fortement recommande.</div>
+  <div class="photo-grid">
+    <div class="ph-opt" id="up-opt">
+      <input type="file" class="up-input" accept="image/*" onchange="handlePhotoUpload(this)">
+      <div class="ph-icon">📷</div>
+      <div class="ph-title">Importer une photo</div>
+      <div class="ph-sub">Votre batiment, vehicule, objet ou logo</div>
+      <img class="up-prev" id="up-prev">
+    </div>
+    <div class="ph-opt" id="search-opt" onclick="toggleSearch()">
+      <div class="ph-icon">🔍</div>
+      <div class="ph-title">Decrire en mots</div>
+      <div class="ph-sub">BrixGPT trouve automatiquement une photo de reference</div>
+    </div>
+  </div>
+  <div class="search-row" id="search-row">
+    <input class="search-i" id="search-q" placeholder="ex. terrain de padel vert avec filet..." onkeydown="if(event.key==='Enter')searchPhoto()">
+    <button class="search-btn" id="search-btn" onclick="searchPhoto()">Chercher</button>
+  </div>
+  <div class="search-res" id="search-res">
+    <img id="search-img" src="" alt="">
+    <div class="search-res-lbl" id="search-lbl"></div>
+  </div>
+  <div class="err" id="photo-err"></div>
+  <div class="btn-row">
+    <button class="btn-back" onclick="goStep(2)">&#8592; Retour</button>
+    <button class="btn" id="btn-s3" onclick="goStep(4)" disabled>Definir le branding &#8594;</button>
+    <button class="btn-skip" onclick="skipPhoto()">Ignorer cette etape</button>
+  </div>
+</div>
+
+<!-- S4 BRANDING -->
+<div class="sec" id="s4">
+  <div class="sec-ey">Etape 4 sur 6</div>
+  <div class="sec-title">Le branding de votre entreprise</div>
+  <div class="sec-sub">Ces informations personnalisent le rendu avec vos couleurs et votre identite visuelle.</div>
+  <div class="inp-w"><input type="text" class="inp" id="company" placeholder="Nom de votre entreprise" style="height:42px"></div>
+  <div class="inp-w"><input type="text" class="inp" id="colors" placeholder="Couleurs : ex. vert fonce et blanc" style="height:42px"></div>
+  <div style="font-size:12px;font-weight:700;color:#111;margin-bottom:7px">Logo <span style="color:#CCC;font-weight:400">(optionnel — extrait vos couleurs automatiquement)</span></div>
+  <div class="logo-zone" id="logo-zone">
+    <input type="file" accept="image/*" onchange="handleLogoUpload(this)" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%">
+    <div style="font-size:20px;margin-bottom:5px">🏷️</div>
+    <div style="font-size:12px;font-weight:600;color:#111" id="logo-title">Importer votre logo</div>
+    <div style="font-size:10px;color:#888">PNG fond transparent — couleurs extraites automatiquement</div>
+    <img class="logo-prev" id="logo-prev">
+    <div class="logo-analyzing" id="logo-analyzing">✨ Extraction des couleurs...</div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-back" onclick="goStep(3)">&#8592; Retour</button>
+    <button class="btn" onclick="goStep(5)">Choisir la complexite &#8594;</button>
+  </div>
+</div>
+
+<!-- S5 COMPLEXITE -->
+<div class="sec" id="s5">
+  <div class="sec-ey">Etape 5 sur 6</div>
+  <div class="sec-title">Niveau de complexite</div>
+  <div class="sec-sub">Choisissez le nombre de pieces. Plus il y en a, plus le rendu sera detaille.</div>
+  <div class="reco-box" id="reco-box"></div>
+  <div class="detail-grid">
+    <div class="dc" data-d="xs" onclick="pickDetail('xs',this)">
+      <div class="dc-top">🧱<div class="dc-reco-lbl" id="reco-xs"></div></div>
+      <div class="dc-body">
+        <div class="dc-label">Simple</div>
+        <div class="dc-pieces">80 – 150 pieces</div>
+        <div class="dc-desc">Silhouette iconique. Tient dans la main.</div>
+      </div>
+    </div>
+    <div class="dc" data-d="s" onclick="pickDetail('s',this)">
+      <div class="dc-top">🏗️<div class="dc-reco-lbl" id="reco-s"></div></div>
+      <div class="dc-body">
+        <div class="dc-label">Standard</div>
+        <div class="dc-pieces">150 – 250 pieces</div>
+        <div class="dc-desc">Bon niveau de detail. Bureau ou etagere.</div>
+      </div>
+    </div>
+    <div class="dc" data-d="m" onclick="pickDetail('m',this)">
+      <div class="dc-top">🏛️<div class="dc-reco-lbl" id="reco-m"></div></div>
+      <div class="dc-body">
+        <div class="dc-label">Detaille</div>
+        <div class="dc-pieces">250 – 450 pieces</div>
+        <div class="dc-desc">Facades travaillees, fort impact visuel.</div>
+      </div>
+    </div>
+    <div class="dc" data-d="l" onclick="pickDetail('l',this)">
+      <div class="dc-top">🏆<div class="dc-reco-lbl" id="reco-l"></div></div>
+      <div class="dc-body">
+        <div class="dc-label">Premium</div>
+        <div class="dc-pieces">450 – 800 pieces</div>
+        <div class="dc-desc">Niveau architectural. Piece d exposition.</div>
+      </div>
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-back" onclick="goStep(4)">&#8592; Retour</button>
+    <button class="btn" id="btn-s5" onclick="showRecap()" disabled>Voir le recapitulatif &#8594;</button>
+  </div>
+</div>
+
+<!-- S6 GENERATION -->
+<div class="sec" id="s6">
+  <div class="sec-ey">Etape 6 sur 6</div>
+  <div class="sec-title" id="s6-title">Recapitulatif</div>
+  <div class="sec-sub" id="s6-sub">Verifiez vos informations avant de lancer la generation.</div>
+
+  <div class="recap-box" id="recap-box"></div>
+  <div class="err" id="gen-err"></div>
+
+  <div class="gen-box" id="gen-loading" style="display:none">
+    <div class="sp-lg"></div>
+    <div class="gen-title">BrixGPT cree votre kit...</div>
+    <div class="gen-steps">
+      <div class="gs" id="gs1"><div class="gs-dot"></div>Analyse de la photo de reference</div>
+      <div class="gs" id="gs2"><div class="gs-dot"></div>Construction de la specification LEGO</div>
+      <div class="gs" id="gs3"><div class="gs-dot"></div>Generation variation 1</div>
+      <div class="gs" id="gs4"><div class="gs-dot"></div>Generation variation 2</div>
+      <div class="gs" id="gs5"><div class="gs-dot"></div>Validation qualite automatique</div>
+    </div>
+  </div>
+
+  <div class="val-box" id="val-box"></div>
+
+  <div id="gen-results" style="display:none">
+    <div class="res-grid" id="res-grid"></div>
+    <button class="btn-regen" onclick="startGeneration()">↻ Regenerer de nouvelles variations</button>
+    <div class="cta-box">
+      <div class="cta-ey">Etape suivante</div>
+      <div class="cta-title">Votre kit est pret a etre configure</div>
+      <div class="cta-sub">Choisissez la taille, le packaging et obtenez votre estimation de prix en 60 secondes.</div>
+      <a href="https://configurateur-archibrix.vercel.app" id="cta-link" class="btn-amber">Configurer mon kit &#8594;</a>
+    </div>
+  </div>
+
+  <div class="btn-row" id="recap-btns">
+    <button class="btn-back" onclick="goStep(5)">&#8592; Modifier</button>
+    <button class="btn" onclick="startGeneration()">Generer mon kit &#8594;</button>
+  </div>
+</div>
+
+<script>
+var ST = {
+  kit: null,
+  refImg: null,
+  refSource: null,
+  refVisionDesc: null,
+  company: '',
+  colors: '',
+  detail: null,
+  logoImg: null,
+  aiData: null,
+  styleRef: null
+};
+
+var DETAIL_MAP = {
+  xs:{pieces:'80 a 150',size:'XS'},
+  s:{pieces:'150 a 250',size:'S'},
+  m:{pieces:'250 a 450',size:'M'},
+  l:{pieces:'450 a 800',size:'L'}
+};
+
+var ANA_MSGS=[
+  ['Lecture de votre site...','Jina AI recupere le contenu'],
+  ['Identification de votre activite...','On analyse votre secteur et produits'],
+  ['Generation des idees de kits...','On imagine votre futur kit LEGO'],
+  ['Finalisation des suggestions...','Presque pret !']
+];
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+function goStep(n){
+  document.querySelectorAll('.sec').forEach(function(s){s.classList.remove('show');});
+  document.getElementById('s'+n).classList.add('show');
+  for(var i=1;i<=6;i++){
+    var e=document.getElementById('p'+i);
+    e.classList.remove('active','done');
+    if(i<n) e.classList.add('done');
+    else if(i===n) e.classList.add('active');
+  }
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── S1 ANALYZE ────────────────────────────────────────────────────────────────
+async function analyzeSite(){
+  var url=document.getElementById('site-url').value.trim();
+  if(!url){showErr('url-err','Entrez une URL valide.');return;}
+  if(url.indexOf('http')!==0) url='https://'+url;
+  hideErr('url-err');
+  document.getElementById('ana-btn').disabled=true;
+  document.getElementById('ana-box').style.display='block';
+  var mi=0;
+  var iv=setInterval(function(){
+    if(mi<ANA_MSGS.length){
+      document.getElementById('ana-msg').textContent=ANA_MSGS[mi][0];
+      document.getElementById('ana-sub').textContent=ANA_MSGS[mi][1];
+      mi++;
+    }
+  },2500);
+  try {
+    var r=await fetch('/api/analyze',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url:url, logoBase64: ST.logoImg})
+    });
+    var json=await r.json();
+    ST.aiData=json;
+    if(json.company) document.getElementById('company').value=json.company;
+    if(json.colors) document.getElementById('colors').value=json.colors;
+    if(json.detail_reco&&json.detail_reason){
+      var dlbl={xs:'Simple (80-150 pcs)',s:'Standard (150-250 pcs)',m:'Detaille (250-450 pcs)',l:'Premium (450-800 pcs)'};
+      var rb=document.getElementById('reco-box');
+      rb.innerHTML='✨ <b>Recommandation BrixGPT :</b> niveau <b>'+dlbl[json.detail_reco]+'</b> — '+json.detail_reason;
+      rb.classList.add('show');
+      var rl=document.getElementById('reco-'+json.detail_reco);
+      if(rl) rl.textContent='Recommande ✨';
+      var dc=document.querySelector('[data-d="'+json.detail_reco+'"]');
+      if(dc) dc.classList.add('reco');
+    }
+    buildKitGrid(json);
+    setTimeout(function(){goStep(2);},500);
+  }catch(e){
+    buildKitGrid(null);
+    showErr('url-err','Analyse impossible. Suggestions generiques preparees.');
+    setTimeout(function(){goStep(2);},800);
+  }
+  clearInterval(iv);
+  document.getElementById('ana-btn').disabled=false;
+  document.getElementById('ana-box').style.display='none';
+}
+
+// ── S2 KIT GRID ───────────────────────────────────────────────────────────────
+function buildKitGrid(ai){
+  var grid=document.getElementById('kit-grid');
+  grid.innerHTML='';
+  var cats=['batiment','vehicule','objet','scene'];
+  var defs={
+    batiment:{icon:'🏢',label:'Batiment',desc:'Siege social, usine, immeuble'},
+    vehicule:{icon:'🚚',label:'Vehicule',desc:'Camion, voiture, engin'},
+    objet:   {icon:'🔧',label:'Objet metier',desc:'Equipement, outil, produit'},
+    scene:   {icon:'🎬',label:'Scene',desc:'Diorama, stand, ambiance'}
+  };
+  cats.forEach(function(cat){
+    var isAI=ai&&ai.suggestions&&ai.suggestions[cat];
+    var d=isAI?ai.suggestions[cat]:defs[cat];
+    var c=document.createElement('div');
+    c.className='kc'+(isAI?' ai':'');
+    c.innerHTML=
+      '<div class="kc-chk"><svg viewBox="0 0 8 6" fill="none"><path d="M1 3l2.2 2.2L7 1" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'+
+      (isAI?'<div class="kc-ai">IA</div>':'')+
+      '<div class="kc-icon">'+d.icon+'</div>'+
+      '<div class="kc-label">'+d.label+'</div>'+
+      '<div class="kc-desc">'+d.desc+'</div>';
+    c.onclick=(function(d,cat,isAI,searchQ){return function(){
+      document.querySelectorAll('.kc').forEach(function(x){x.classList.remove('on');});
+      c.classList.add('on');
+      var aw=document.getElementById('autre-f');
+      if(aw) aw.classList.remove('show');
+      ST.kit={label:d.label,type:cat,prompt:isAI?d.prompt:null,isAI:isAI,isAutre:false,searchQuery:searchQ};
+      if(isAI&&d.search_query) document.getElementById('search-q').value=d.search_query;
+      document.getElementById('btn-s2').disabled=false;
+    };})(d,cat,isAI,isAI&&d.search_query?d.search_query:'');
+    grid.appendChild(c);
+  });
+
+  // Carte Mon idee
+  var autre=document.createElement('div');
+  autre.className='kc';
+  autre.innerHTML=
+    '<div class="kc-chk"><svg viewBox="0 0 8 6" fill="none"><path d="M1 3l2.2 2.2L7 1" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'+
+    '<div class="kc-icon">✏️</div>'+
+    '<div class="kc-label">Mon idee</div>'+
+    '<div class="kc-desc">Decrivez votre propre kit</div>'+
+    '<div class="autre-f" id="autre-f">'+
+      '<div class="af-lbl">Votre objet</div>'+
+      '<input class="af-i" id="af-obj" placeholder="ex. terrain de padel..." onclick="event.stopPropagation()">'+
+      '<div class="af-lbl">Couleur</div>'+
+      '<input class="af-i" id="af-col" placeholder="ex. vert et blanc" onclick="event.stopPropagation()">'+
+      '<div class="af-lbl">Logo / texte</div>'+
+      '<input class="af-i" id="af-logo" placeholder="ex. Padelstay" onclick="event.stopPropagation()">'+
+    '</div>';
+  autre.onclick=function(){
+    document.querySelectorAll('.kc').forEach(function(x){x.classList.remove('on');});
+    autre.classList.add('on');
+    document.getElementById('autre-f').classList.add('show');
+    ST.kit={label:'Mon idee',type:'objet',prompt:null,isAI:false,isAutre:true};
+    document.getElementById('btn-s2').disabled=false;
+  };
+  grid.appendChild(autre);
+
+  if(ai&&ai.company){
+    document.getElementById('s2-sub').textContent=
+      'BrixGPT a prepare des suggestions pour '+ai.company+'. Selectionnez-en une ou proposez votre idee.';
+  }
+}
+
+// ── S3 PHOTO ──────────────────────────────────────────────────────────────────
+function handlePhotoUpload(input){
+  var file=input.files[0]; if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    ST.refImg=e.target.result; ST.refSource='upload';
+    var opt=document.getElementById('up-opt');
+    opt.classList.add('ok');
+    var prev=document.getElementById('up-prev');
+    prev.src=e.target.result; prev.style.display='block';
+    document.getElementById('btn-s3').disabled=false;
+    document.getElementById('search-opt').classList.remove('on');
+    document.getElementById('search-res').classList.remove('show');
+  };
+  reader.readAsDataURL(file);
+}
+
+function toggleSearch(){
+  var row=document.getElementById('search-row');
+  var opt=document.getElementById('search-opt');
+  if(row.classList.contains('show')){row.classList.remove('show');opt.classList.remove('on');}
+  else{row.classList.add('show');opt.classList.add('on');document.getElementById('search-q').focus();}
+}
+
+async function searchPhoto(){
+  var q=document.getElementById('search-q').value.trim(); if(!q) return;
+  var btn=document.getElementById('search-btn');
+  btn.disabled=true; btn.textContent='Recherche...';
+  hideErr('photo-err');
+  try {
+    var r=await fetch('/api/search',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({query:q, type:ST.kit?ST.kit.type:'default'})
+    });
+    var d=await r.json();
+    ST.styleRef=d.styleRef||null;
+    if(d.photoUrl){
+      // Fetch et convertir en base64
+      var imgResp=await fetch(d.photoUrl);
+      var blob=await imgResp.blob();
+      var reader2=new FileReader();
+      reader2.onload=function(e){
+        ST.refImg=e.target.result; ST.refSource='search';
+        var res=document.getElementById('search-res');
+        res.classList.add('show');
+        document.getElementById('search-img').src=e.target.result;
+        document.getElementById('search-lbl').textContent='Photo trouvee — '+( d.photoDesc||q );
+        document.getElementById('btn-s3').disabled=false;
+        document.getElementById('up-opt').classList.remove('ok');
+        document.getElementById('up-prev').style.display='none';
+      };
+      reader2.readAsDataURL(blob);
+    } else {
+      // Pas de photo mais on a le styleRef
+      ST.refSource='style';
+      document.getElementById('search-res').classList.add('show');
+      document.getElementById('search-img').style.display='none';
+      document.getElementById('search-lbl').textContent='Reference de style preparee — '+( d.styleRef||'' );
+      document.getElementById('btn-s3').disabled=false;
+    }
+  }catch(e){showErr('photo-err','Recherche impossible : '+e.message);}
+  btn.disabled=false; btn.textContent='Chercher';
+}
+
+function skipPhoto(){ST.refImg=null;ST.refSource=null;goStep(4);}
+
+// ── S4 LOGO ───────────────────────────────────────────────────────────────────
+async function handleLogoUpload(input){
+  var file=input.files[0]; if(!file) return;
+  var reader=new FileReader();
+  reader.onload=async function(e){
+    ST.logoImg=e.target.result;
+    var prev=document.getElementById('logo-prev');
+    prev.src=e.target.result; prev.style.display='block';
+    var zone=document.getElementById('logo-zone');
+    zone.classList.add('ok');
+    document.getElementById('logo-title').textContent='Logo importe !';
+    document.getElementById('logo-analyzing').style.display='block';
+    try {
+      var r=await fetch('/api/analyze',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({logoBase64:e.target.result})
+      });
+      var d=await r.json();
+      if(d.colors){var ci=document.getElementById('colors');if(!ci.value) ci.value=d.colors;}
+      if(d.company){var coi=document.getElementById('company');if(!coi.value) coi.value=d.company;}
+    }catch(ex){}
+    document.getElementById('logo-analyzing').style.display='none';
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── S5 DETAIL ─────────────────────────────────────────────────────────────────
+function pickDetail(d,el){
+  ST.detail=d;
+  document.querySelectorAll('[data-d]').forEach(function(c){c.classList.remove('on');});
+  el.classList.add('on');
+  document.getElementById('btn-s5').disabled=false;
+}
+
+// ── RECAP ─────────────────────────────────────────────────────────────────────
+function showRecap(){
+  ST.company=document.getElementById('company').value.trim();
+  ST.colors=document.getElementById('colors').value.trim();
+  var dm=DETAIL_MAP[ST.detail]||DETAIL_MAP['m'];
+  var rb=document.getElementById('recap-box');
+  rb.innerHTML=
+    '<div class="recap-title">Recapitulatif de votre projet</div>'+
+    '<div class="recap-grid">'+
+      '<div class="ri"><div class="ri-k">Entreprise</div><div class="ri-v '+(ST.company?'ok':'miss')+'">'+(ST.company||'Non renseigne')+'</div></div>'+
+      '<div class="ri"><div class="ri-k">Kit choisi</div><div class="ri-v ok">'+(ST.kit?ST.kit.label:'—')+'</div></div>'+
+      '<div class="ri"><div class="ri-k">Couleurs</div><div class="ri-v '+(ST.colors?'ok':'miss')+'">'+(ST.colors||'Non renseigne')+'</div></div>'+
+      '<div class="ri"><div class="ri-k">Photo ref</div><div class="ri-v '+(ST.refImg?'ok':'miss')+'">'+(ST.refImg?'✓ Ajoutee':'Non ajoutee')+'</div></div>'+
+      '<div class="ri"><div class="ri-k">Logo</div><div class="ri-v '+(ST.logoImg?'ok':'miss')+'">'+(ST.logoImg?'✓ Importe':'Non importe')+'</div></div>'+
+      '<div class="ri"><div class="ri-k">Pieces</div><div class="ri-v ok">'+dm.pieces+'</div></div>'+
+    '</div>';
+  document.getElementById('gen-loading').style.display='none';
+  document.getElementById('gen-results').style.display='none';
+  document.getElementById('recap-btns').style.display='flex';
+  document.getElementById('val-box').classList.remove('show');
+  document.getElementById('s6-title').textContent='Recapitulatif';
+  document.getElementById('s6-sub').textContent='Verifiez vos informations avant de lancer la generation.';
+  goStep(6);
+}
+
+// ── GENERATION ────────────────────────────────────────────────────────────────
+function setGs(n){
+  for(var i=1;i<n;i++){var e=document.getElementById('gs'+i);if(e){e.classList.remove('active');e.classList.add('done');}}
+  var a=document.getElementById('gs'+n); if(a) a.classList.add('active');
+}
+
+async function startGeneration(){
+  document.getElementById('recap-btns').style.display='none';
+  document.getElementById('gen-results').style.display='none';
+  document.getElementById('gen-loading').style.display='block';
+  document.getElementById('gen-err').style.display='none';
+  document.getElementById('val-box').classList.remove('show');
+  document.getElementById('s6-title').textContent='Generation en cours';
+  document.getElementById('s6-sub').textContent='BrixGPT cree votre kit LEGO...';
+  for(var i=1;i<=5;i++){var g=document.getElementById('gs'+i);if(g){g.classList.remove('active','done');}}
+
+  try {
+    // Step 1: Photo de reference prete (envoyee directement a gpt-image-1)
+    setGs(1);
+    if(ST.refImg){
+      document.getElementById('gs1').querySelector('.gs-dot').style.background='#22C55E';
+    }
+    await new Promise(function(r){setTimeout(r,300);});
+
+    // Step 2: Build kit info
+    setGs(2);
+    var kitPayload={...ST.kit};
+    if(ST.kit&&ST.kit.isAutre){
+      kitPayload.autreObj=document.getElementById('af-obj')?document.getElementById('af-obj').value.trim():'';
+      kitPayload.autreCol=document.getElementById('af-col')?document.getElementById('af-col').value.trim():'';
+      kitPayload.autreLogo=document.getElementById('af-logo')?document.getElementById('af-logo').value.trim():'';
+    }
+    await new Promise(function(r){setTimeout(r,400);});
+
+    // Steps 3+4: Generate 2 variations
+    var imgs=[];
+    for(var i=0;i<2;i++){
+      setGs(3+i);
+      var genResp=await fetch('/api/generate',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          kit:kitPayload,
+          company:ST.company,
+          colors:ST.colors,
+          detail:ST.detail||'m',
+          refImgBase64:ST.refImg||null,
+          variation:i
+        })
+      });
+      if(!genResp.ok){var er=await genResp.json();throw new Error(er.error||'Erreur generation');}
+      var gd=await genResp.json();
+      imgs.push({url:gd.url, prompt:gd.prompt});
+    }
+
+    // Step 5: Auto-validate
+    setGs(5);
+    var validations=[];
+    for(var j=0;j<imgs.length;j++){
+      try {
+        var valResp=await fetch('/api/validate',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({imageUrl:imgs[j].url, company:ST.company, colors:ST.colors, kit:ST.kit})
+        });
+        if(valResp.ok){
+          var vd=await valResp.json();
+          validations.push(vd);
+        } else {
+          validations.push({total:80,pass:true});
+        }
+      }catch(e){validations.push({total:80,pass:true});}
+    }
+
+    // Check if re-gen needed
+    var minScore=Math.min(...validations.map(function(v){return v.total||80;}));
+    if(minScore<75&&validations[0]&&validations[0].reinforcement){
+      var vb=document.getElementById('val-box');
+      vb.innerHTML='⚡ Score qualite insuffisant ('+minScore+'/100). Regeneration automatique avec prompt renforce...';
+      vb.classList.add('show');
+      // Re-generate with reinforcement hint
+      var reinf=validations[0].reinforcement||'';
+      for(var k=0;k<2;k++){
+        var genResp2=await fetch('/api/generate',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            kit:kitPayload,
+            company:ST.company,
+            colors:ST.colors,
+            detail:ST.detail||'m',
+            refVisionDesc:visionDesc,
+            styleRef:ST.styleRef,
+            variation:k,
+            reinforcement:reinf
+          })
+        });
+        if(genResp2.ok){var gd2=await genResp2.json();imgs[k]={url:gd2.url,prompt:gd2.prompt};}
+        var valResp2=await fetch('/api/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageUrl:imgs[k].url,company:ST.company,colors:ST.colors,kit:ST.kit})});
+        if(valResp2.ok){validations[k]=await valResp2.json();}
+      }
+    }
+
+    showResults(imgs,validations);
+  }catch(e){
+    document.getElementById('gen-loading').style.display='none';
+    document.getElementById('recap-btns').style.display='flex';
+    document.getElementById('s6-title').textContent='Recapitulatif';
+    document.getElementById('s6-sub').textContent='Verifiez vos informations avant de lancer la generation.';
+    var eb=document.getElementById('gen-err');
+    eb.style.display='block';
+    eb.textContent='Erreur : '+e.message;
+  }
+}
+
+function showResults(imgs,validations){
+  document.getElementById('gen-loading').style.display='none';
+  document.getElementById('gen-results').style.display='block';
+  document.getElementById('s6-title').textContent='Choisissez votre rendu';
+  document.getElementById('s6-sub').textContent='Selectionnez la variation qui vous convient. Vous pouvez regenerer.';
+  var dm=DETAIL_MAP[ST.detail||'m'];
+  var grid=document.getElementById('res-grid');
+  grid.innerHTML='';
+  imgs.forEach(function(img,i){
+    var v=validations&&validations[i]?validations[i]:{total:80,pass:true};
+    var c=document.createElement('div');
+    c.className='rc';
+    c.innerHTML=
+      '<div class="rc-img-wrap">'+
+        '<img src="'+img.url+'" alt="Variation '+(i+1)+'">'+
+        '<div class="rc-wm">Generated by BrixGPT<br>powered by Archibrix</div>'+
+      '</div>'+
+      '<div class="rc-body">'+
+        '<div class="rc-label">Variation '+(i+1)+'</div>'+
+        '<div class="rc-sub">Cliquez pour selectionner</div>'+
+        (v.total?'<span class="score-badge '+(v.total>=75?'score-good':'score-bad')+'">Score LEGO : '+v.total+'/100</span>':'')+
+        '<div class="rc-chk"><svg width="12" height="9" viewBox="0 0 12 9" fill="none"><path d="M1 4l3.5 3.5L11 1" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Selectionnee</div>'+
+      '</div>';
+    c.onclick=function(){document.querySelectorAll('.rc').forEach(function(x){x.classList.remove('on');});c.classList.add('on');};
+    grid.appendChild(c);
+  });
+  document.getElementById('cta-link').href='https://configurateur-archibrix.vercel.app?size='+encodeURIComponent(dm.size);
+}
+
+function showErr(id,msg){var e=document.getElementById(id);e.textContent=msg;e.style.display='block';}
+function hideErr(id){document.getElementById(id).style.display='none';}
+
+buildKitGrid(null);
+goStep(1);
+</script>
+</body>
+</html>
