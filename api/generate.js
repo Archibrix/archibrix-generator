@@ -1,131 +1,133 @@
+// api/generate.js — BrixGPT, génération d'image (fonction serverless Vercel)
+//
+// Variables d'environnement Vercel (Settings → Environment Variables) :
+//   OPENAI_API_KEY   obligatoire, jamais dans le code
+//   IMAGE_MODEL      optionnel, défaut "gpt-image-2.5-flare"
+//   IMAGE_QUALITY    optionnel, défaut "high"
+//   STYLE_REF_URLS   optionnel, URLs de vrais rendus Archibrix séparées par des virgules
+//                    (ex. https://archibrix-generator.vercel.app/style/ref1.jpg,...)
+//
+// Contrat inchangé avec index.html : on reçoit { kit, company, colors, detail, refImgBase64, variation }
+// et on renvoie { url }. Champs en plus, optionnels : logoBase64, model (pour la page de comparaison).
+
+const ALLOWED_MODELS = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2', 'gpt-image-1'];
+const DEFAULT_MODEL = ALLOWED_MODELS.includes(process.env.IMAGE_MODEL) ? process.env.IMAGE_MODEL : 'gpt-image-2.5-flare';
+const QUALITY = process.env.IMAGE_QUALITY || 'high';
+const STYLE_REF_URLS = (process.env.STYLE_REF_URLS || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 3);
+
+const PIECES = { xs: '80 to 150', s: '150 to 250', m: '250 to 450', l: '450 to 800' };
+
+function clean(v, max = 200) {
+  return String(v || '').replace(/[\r\n]+/g, ' ').trim().slice(0, max);
+}
+
+function dataUrlToBlob(input) {
+  if (!input) return null;
+  const m = /^data:(image\/[\w+.-]+);base64,(.+)$/s.exec(input);
+  const type = m ? m[1] : 'image/png';
+  const b64 = m ? m[2] : input;
+  try { return new Blob([Buffer.from(b64, 'base64')], { type }); } catch { return null; }
+}
+
+async function urlToBlob(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Référence de style introuvable : ${url}`);
+  return new Blob([await r.arrayBuffer()], { type: r.headers.get('content-type') || 'image/jpeg' });
+}
+
+function buildPrompt({ subject, company, colors, pieces, variation, slots }) {
+  const lines = [];
+
+  // Rôle de chaque image, numérotée comme le recommande la doc OpenAI
+  if (slots.ref) lines.push(`Image ${slots.ref} is the client's reference photo. It is the subject to rebuild: keep its silhouette, proportions, colors and distinctive features clearly recognizable.`);
+  if (slots.logo) lines.push(`Image ${slots.logo} is the client's logo. Print it once, small, on a single flat tile on the front border of the baseplate. Do not place it anywhere else.`);
+  if (slots.style.length) lines.push(`Image${slots.style.length > 1 ? 's' : ''} ${slots.style.join(', ')} ${slots.style.length > 1 ? 'are photos' : 'is a photo'} of real Archibrix brick kits. Match their photographic style, lighting, brick vocabulary and level of detail. Do not copy their subjects.`);
+
+  lines.push(`Rebuild the subject as a buildable brick model made of LEGO-compatible bricks, about ${pieces} pieces. Subject: ${subject}.`);
+  if (colors) lines.push(`Use these brick colors: ${colors}. The border bricks around the grey baseplate are ${colors.split(/[,&]/)[0].trim()}.`);
+  if (company && !slots.logo) lines.push(`Add one small white flat tile on the front border of the baseplate with "${company}" printed on it.`);
+
+  lines.push(
+    'Brick rules: every top surface shows round studs; shapes come only from real brick, plate, slope and tile pieces with 90-degree edges; transparent pieces for windows; glossy ABS plastic; no smooth sculpted surfaces; no organic curves.',
+    'One main object only: no people, trees, extra vehicles, furniture or scenery.',
+    'No LEGO logo or any other brand marking on studs, bricks or background. No text other than the client tile.',
+    variation === 0
+      ? 'Camera: front isometric view, centered and symmetrical.'
+      : 'Camera: three-quarter front-right view, slightly above eye level, showing depth.',
+    'Photography: real physical toy product photo, not CGI or illustration. Pure white seamless studio background, soft diffused light, gentle drop shadow.'
+  );
+  return lines.join('\n');
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const OPENAI_KEY = process.env.OPENAI_API_KEY;
-  if (!OPENAI_KEY) return res.status(500).json({ error: 'API key not configured' });
+  const KEY = process.env.OPENAI_API_KEY;
+  if (!KEY) return res.status(500).json({ error: 'Clé API non configurée sur le serveur' });
 
-  const { kit, company, colors, detail, refImgBase64, variation } = req.body;
+  const body = req.body || {};
+  const model = ALLOWED_MODELS.includes(body.model) ? body.model : DEFAULT_MODEL;
+  const company = clean(body.company, 60);
+  const colors = clean(body.colors, 80);
+  const pieces = PIECES[body.detail] || PIECES.m;
+  const variation = body.variation === 0 ? 0 : 1;
 
-  const DETAIL_MAP = {
-    xs: '80 to 150', s: '150 to 250', m: '250 to 450', l: '450 to 800'
-  };
-  const pieces = DETAIL_MAP[detail] || DETAIL_MAP['m'];
-
-  let subject = '';
-  if (kit?.isAutre) {
-    subject = `${kit.autreObj || 'custom object'} in ${kit.autreCol || colors || 'brand colors'} with ${kit.autreLogo || company || ''} branding`;
-  } else if (kit?.isAI && kit?.prompt) {
-    subject = kit.prompt;
-  } else {
-    subject = `${kit?.label || 'professional object'} for ${company || 'a company'}`;
-  }
-
-  const angleNote = variation === 0
-    ? 'Front isometric view, centered and symmetrical.'
-    : '3/4 front-right view, slightly above eye level, showing depth.';
-
-  const prompt =
-    `Transform the reference image into an official LEGO brick model. ` +
-    `Subject: ${subject}. ` +
-    (colors ? `Use these exact brick colors: ${colors}. ` : '') +
-    (company ? `Add a small white LEGO tile with "${company}" printed text on the front base border. ` : '') +
-    `Build approximately ${pieces} LEGO bricks total. ` +
-    `STRICT LEGO RULES: ` +
-    `Every surface must show clearly visible round cylindrical LEGO studs. ` +
-    `All shapes made exclusively from rectangular interlocking LEGO bricks with 90-degree edges. ` +
-    `Use real LEGO piece types: bricks, plates, slopes, tiles, transparent pieces for windows. ` +
-    `Shiny ABS plastic material. No smooth surfaces without studs. No organic curves. ` +
-    `Keep it simple — ONE main object, remove all people, trees, cars, furniture, background decoration. ` +
-    (colors ? `Border bricks around the grey baseplate must be ${colors.split(/[,&]/)[0].trim()} colored. ` : '') +
-    `${angleNote} ` +
-    `PHOTOGRAPHY: official LEGO Creator Expert product photograph. ` +
-    `Real toy photography — NOT CGI, NOT Blender, NOT concept art. ` +
-    `Pure white seamless studio background. Soft diffused lighting. Gentle drop shadow. ` +
-    `The result must look exactly like a real physical LEGO toy photographed in a studio.`;
+  const kit = body.kit || {};
+  let subject;
+  if (kit.isAutre) subject = `${clean(kit.autreObj) || 'custom object'} in ${clean(kit.autreCol) || colors || 'brand colors'}`;
+  else if (kit.isAI && kit.prompt) subject = clean(kit.prompt, 400);
+  else subject = `${clean(kit.label) || 'professional object'} for ${company || 'a company'}`;
 
   try {
-    let imageUrl = null;
+    // Assemblage des images d'entrée : photo client, logo, puis références de style
+    const images = [];
+    const slots = { ref: 0, logo: 0, style: [] };
+    const ref = dataUrlToBlob(body.refImgBase64);
+    if (ref) { images.push(ref); slots.ref = images.length; }
+    const logo = dataUrlToBlob(body.logoBase64);
+    if (logo) { images.push(logo); slots.logo = images.length; }
+    for (const u of STYLE_REF_URLS) { images.push(await urlToBlob(u)); slots.style.push(images.length); }
 
-    if (refImgBase64) {
-      // Utiliser images/edits avec multipart/form-data natif Node.js
-      const base64Data = refImgBase64.replace(/^data:image\/\w+;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
+    const prompt = buildPrompt({ subject, company, colors, pieces, variation, slots });
+    const t0 = Date.now();
+    let r;
 
-      const boundary = '----FormBoundary' + Math.random().toString(36).slice(2);
-
-      const buildPart = (name, value, filename, contentType) => {
-        let part = `--${boundary}\r\nContent-Disposition: form-data; name="${name}"`;
-        if (filename) part += `; filename="${filename}"`;
-        part += '\r\n';
-        if (contentType) part += `Content-Type: ${contentType}\r\n`;
-        part += '\r\n';
-        return part;
-      };
-
-      const textEncoder = new TextEncoder();
-      const parts = [];
-
-      // model
-      parts.push(Buffer.from(buildPart('model') + 'gpt-image-1\r\n'));
-      // prompt
-      parts.push(Buffer.from(buildPart('prompt') + prompt + '\r\n'));
-      // n
-      parts.push(Buffer.from(buildPart('n') + '1\r\n'));
-      // size
-      parts.push(Buffer.from(buildPart('size') + '1024x1024\r\n'));
-      // quality
-      parts.push(Buffer.from(buildPart('quality') + 'high\r\n'));
-      // image
-      parts.push(Buffer.from(buildPart('image[]', null, 'reference.png', 'image/png')));
-      parts.push(buffer);
-      parts.push(Buffer.from('\r\n'));
-      // close
-      parts.push(Buffer.from(`--${boundary}--\r\n`));
-
-      const body = Buffer.concat(parts);
-
-      const r = await fetch('https://api.openai.com/v1/images/edits', {
+    if (images.length) {
+      const fd = new FormData();
+      fd.append('model', model);
+      fd.append('prompt', prompt);
+      fd.append('n', '1');
+      fd.append('size', '1024x1024');
+      fd.append('quality', QUALITY);
+      if (model === 'gpt-image-1') fd.append('input_fidelity', 'high');
+      images.forEach((b, i) => fd.append('image[]', b, `image-${i + 1}.${(b.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`));
+      r = await fetch('https://api.openai.com/v1/images/edits', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_KEY}`,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-          'Content-Length': body.length.toString()
-        },
-        body
+        headers: { Authorization: `Bearer ${KEY}` },
+        body: fd
       });
-
-      if (!r.ok) {
-        const er = await r.json();
-        console.log('Edits failed:', er.error?.message, '— falling back to generations');
-        // Fallback: generation texte seule
-        const r2 = await fetch('https://api.openai.com/v1/images/generations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
-          body: JSON.stringify({ model: 'gpt-image-1', prompt, n: 1, size: '1024x1024', quality: 'high' })
-        });
-        if (!r2.ok) { const e2 = await r2.json(); throw new Error(e2.error?.message || 'Generation failed'); }
-        const d2 = await r2.json();
-        imageUrl = d2.data[0].url || `data:image/png;base64,${d2.data[0].b64_json}`;
-      } else {
-        const d = await r.json();
-        imageUrl = d.data[0].url || `data:image/png;base64,${d.data[0].b64_json}`;
-      }
-
     } else {
-      // Pas de photo — generation texte seule
-      const r = await fetch('https://api.openai.com/v1/images/generations', {
+      r = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
-        body: JSON.stringify({ model: 'gpt-image-1', prompt, n: 1, size: '1024x1024', quality: 'high' })
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
+        body: JSON.stringify({ model, prompt, n: 1, size: '1024x1024', quality: QUALITY })
       });
-      if (!r.ok) { const er = await r.json(); throw new Error(er.error?.message || 'Generation failed'); }
-      const d = await r.json();
-      imageUrl = d.data[0].url || `data:image/png;base64,${d.data[0].b64_json}`;
     }
 
-    return res.status(200).json({ url: imageUrl, prompt });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      // Plus de bascule silencieuse vers le texte seul : si la photo n'est pas prise en compte, on veut le savoir
+      console.error('OpenAI error', model, r.status, d.error?.message);
+      return res.status(r.status).json({ error: d.error?.message || 'Erreur OpenAI', model });
+    }
 
-  } catch(e) {
-    return res.status(500).json({ error: e.message });
+    const img = d.data?.[0];
+    const url = img?.url || (img?.b64_json ? `data:image/png;base64,${img.b64_json}` : null);
+    if (!url) return res.status(502).json({ error: 'Réponse OpenAI sans image', model });
+
+    return res.status(200).json({ url, model, ms: Date.now() - t0, usage: d.usage || null, prompt });
+  } catch (e) {
+    console.error('generate failed', model, e);
+    return res.status(500).json({ error: e.message, model });
   }
 }
