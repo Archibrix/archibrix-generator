@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>BrixGPT · Comparateur de modèles</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--ink:#16161A;--amber:#F7B31C;--amber-dark:#8A5D00;--amber-text:#1A1712;--white:#FFF;--bg:#EFEEEA;--band:#F6F5F2;--line:#E3E2DE;--secondary:#55555E;--muted:#C8C7C1;--r-tile:10px;--r-pill:6px}
+body{font-family:'Poppins',sans-serif;background:var(--bg);color:var(--ink);padding:40px 16px 80px}
+.wrap{max-width:1100px;margin:0 auto}
+h1{font-size:22px;font-weight:600;margin-bottom:4px}
+.sub{font-size:13px;color:var(--secondary);margin-bottom:24px}
+.panel{background:var(--white);border:1.5px solid var(--line);border-radius:var(--r-tile);padding:20px;display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--secondary);margin-bottom:6px}
+input[type=text],select{width:100%;border:1px solid var(--line);border-radius:var(--r-pill);padding:10px 12px;font:inherit;font-size:13px;background:var(--white);color:var(--ink)}
+input[type=file]{font-size:12px}
+.full{grid-column:1/-1}
+.models{display:flex;flex-wrap:wrap;gap:8px}
+.models label{display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink);background:var(--band);border:1px solid var(--line);border-radius:var(--r-pill);padding:8px 12px;cursor:pointer;margin:0}
+.thumb{height:72px;border-radius:var(--r-pill);margin-top:8px;display:none;border:1px solid var(--line)}
+button{background:var(--amber);color:var(--amber-text);border:none;border-radius:var(--r-pill);padding:13px 24px;font:inherit;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}
+.note{font-size:11px;color:var(--secondary);margin-top:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:20px}
+.card{background:var(--white);border:1.5px solid var(--line);border-radius:var(--r-tile);overflow:hidden}
+.card-h{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);font-size:13px;font-weight:600}
+.card-h span{font-size:11px;font-weight:500;color:var(--secondary)}
+.card-b{aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--band);font-size:12px;color:var(--secondary);padding:16px;text-align:center}
+.card-b img{width:100%;height:100%;object-fit:contain;display:block}
+.err{color:#9B1C1C}
+.card-f{padding:10px 16px;font-size:11px;color:var(--secondary);display:flex;justify-content:space-between}
+.card-f a{color:var(--ink);font-weight:600}
+@media(max-width:640px){.panel{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Comparateur de modèles</h1>
+  <p class="sub">Même photo, même prompt, plusieurs modèles en parallèle. Page interne, non référencée.</p>
+
+  <div class="panel">
+    <div class="full">
+      <label for="photo">Photo de référence</label>
+      <input type="file" id="photo" accept="image/*">
+      <img id="thumb" class="thumb" alt="">
+    </div>
+    <div class="full">
+      <label for="subject">Sujet</label>
+      <input type="text" id="subject" placeholder="Ex. camion benne blanc et vert avec grue de chargement">
+    </div>
+    <div>
+      <label for="company">Entreprise</label>
+      <input type="text" id="company" placeholder="Nom imprimé sur la tuile">
+    </div>
+    <div>
+      <label for="colors">Couleurs</label>
+      <input type="text" id="colors" placeholder="Ex. vert foncé, blanc">
+    </div>
+    <div>
+      <label for="logo">Logo (optionnel)</label>
+      <input type="file" id="logo" accept="image/png,image/jpeg,image/webp">
+    </div>
+    <div>
+      <label for="detail">Taille</label>
+      <select id="detail"><option value="xs">XS</option><option value="s">S</option><option value="m" selected>M</option><option value="l">L</option></select>
+    </div>
+    <div class="full">
+      <label>Modèles</label>
+      <div class="models" id="models">
+        <label><input type="checkbox" value="gpt-image-1" checked> gpt-image-1 (actuel)</label>
+        <label><input type="checkbox" value="gpt-image-2"> gpt-image-2</label>
+        <label><input type="checkbox" value="gpt-image-2.5-flare" checked> gpt-image-2.5-flare</label>
+        <label><input type="checkbox" value="gpt-image-2.5-sunburst"> gpt-image-2.5-sunburst</label>
+      </div>
+    </div>
+    <div class="full">
+      <button id="go">Comparer</button>
+      <p class="note">Chaque modèle coché lance une génération facturée sur le compte OpenAI.</p>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+var photoData=null, logoData=null;
+
+// Réduit l'image à 1536 px max pour rester sous la limite de 4,5 Mo des fonctions Vercel
+function toDataUrl(file,keepPng){
+  return new Promise(function(resolve,reject){
+    var img=new Image(), url=URL.createObjectURL(file);
+    img.onload=function(){
+      var s=Math.min(1,1536/Math.max(img.width,img.height));
+      var c=document.createElement("canvas");
+      c.width=Math.round(img.width*s); c.height=Math.round(img.height*s);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+      URL.revokeObjectURL(url);
+      resolve(keepPng?c.toDataURL("image/png"):c.toDataURL("image/jpeg",0.9));
+    };
+    img.onerror=reject; img.src=url;
+  });
+}
+
+document.getElementById("photo").onchange=async function(e){
+  var f=e.target.files[0]; if(!f)return;
+  photoData=await toDataUrl(f,false);
+  var t=document.getElementById("thumb"); t.src=photoData; t.style.display="block";
+};
+document.getElementById("logo").onchange=async function(e){
+  var f=e.target.files[0]; logoData=f?await toDataUrl(f,true):null;
+};
+
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+
+async function runOne(model,card,payload){
+  var body=card.querySelector(".card-b"), time=card.querySelector(".card-h span"), foot=card.querySelector(".card-f");
+  var t0=Date.now(), tick=setInterval(function(){time.textContent=Math.round((Date.now()-t0)/1000)+" s";},500);
+  try{
+    var r=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.assign({model:model},payload))});
+    var d=await r.json().catch(function(){return{error:"Réponse illisible (HTTP "+r.status+")"};});
+    clearInterval(tick);
+    time.textContent=((Date.now()-t0)/1000).toFixed(1)+" s";
+    if(!r.ok||!d.url){body.innerHTML="<span class='err'>"+esc(d.error||("Erreur HTTP "+r.status))+"</span>";return;}
+    body.innerHTML="<img alt='Rendu "+esc(model)+"'>";
+    body.querySelector("img").src=d.url;
+    var tok=d.usage&&d.usage.total_tokens?d.usage.total_tokens.toLocaleString("fr-FR")+" tokens":"";
+    foot.innerHTML="<span>"+tok+"</span><a download='"+esc(model)+".png'>Télécharger</a>";
+    foot.querySelector("a").href=d.url;
+  }catch(e){
+    clearInterval(tick);
+    body.innerHTML="<span class='err'>"+esc(e.message)+"</span>";
+  }
+}
+
+document.getElementById("go").onclick=async function(){
+  var models=[].slice.call(document.querySelectorAll("#models input:checked")).map(function(i){return i.value;});
+  if(!models.length){alert("Coche au moins un modèle.");return;}
+  var subject=document.getElementById("subject").value.trim();
+  if(!subject&&!photoData){alert("Ajoute une photo ou décris le sujet.");return;}
+  var payload={
+    kit:{isAI:true,prompt:subject||"the object shown in the reference photo"},
+    company:document.getElementById("company").value.trim(),
+    colors:document.getElementById("colors").value.trim(),
+    detail:document.getElementById("detail").value,
+    refImgBase64:photoData, logoBase64:logoData, variation:1
+  };
+  var btn=this; btn.disabled=true;
+  var grid=document.getElementById("grid"); grid.innerHTML="";
+  var jobs=models.map(function(m){
+    var c=document.createElement("div"); c.className="card";
+    c.innerHTML="<div class='card-h'>"+esc(m)+"<span>0 s</span></div><div class='card-b'>Génération en cours…</div><div class='card-f'></div>";
+    grid.appendChild(c);
+    return runOne(m,c,payload);
+  });
+  await Promise.all(jobs);
+  btn.disabled=false;
+};
+</script>
+</body>
+</html>
